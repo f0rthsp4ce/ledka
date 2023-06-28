@@ -1,0 +1,158 @@
+#include <esp_http_server.h>
+#include <stdarg.h>
+
+#include "main.h"
+
+#define PRINT(BUF, P, ...) P += snprintf(P, BUF + sizeof BUF - P, __VA_ARGS__)
+#define CHECK_ERR(ERR, MSG, ...)                                               \
+  do {                                                                         \
+    if ((ERR) != ESP_OK)                                                       \
+      return return_error(req, (ERR), __FILE__, __LINE__, (MSG),               \
+                          ##__VA_ARGS__);                                      \
+  } while (0)
+
+static esp_err_t return_error(httpd_req_t *req, esp_err_t err, const char *file,
+                              int line, const char *msg, ...) {
+  httpd_resp_set_status(req, "400 Bad Request");
+  char buf[1024], *p = buf;
+  PRINT(buf, p, "Error %d at %s:%d\n", err, file, line);
+
+  va_list args;
+  va_start(args, msg);
+  p += vsnprintf(p, buf + sizeof buf - p, msg, args);
+  va_end(args);
+  PRINT(buf, p, "\n");
+
+  esp_err_to_name_r(err, p, buf + sizeof buf - p);
+  p += strlen(p);
+  PRINT(buf, p, "\n");
+
+  httpd_resp_send(req, buf, p - buf);
+  return ESP_OK;
+}
+
+static esp_err_t get_handler(httpd_req_t *req) {
+  char buf[1024], *p = buf;
+  PRINT(buf, p, "Hello, world!\n");
+  PRINT(buf, p, "Time: %lld\n", esp_timer_get_time());
+  PRINT(buf, p, "Free heap: %d\n", esp_get_free_heap_size());
+
+  httpd_resp_send(req, buf, p - buf);
+  return ESP_OK;
+}
+
+static esp_err_t post_data_handler(httpd_req_t *req) {
+  char buf[1024], *p = buf;
+  uint8_t data[sizeof data1];
+  if (req->content_len != sizeof data) {
+    httpd_resp_set_status(req, "400 Bad Request");
+    PRINT(buf, p, "Invalid content length: %d, expected %d\n", req->content_len,
+          sizeof data);
+    httpd_resp_send(req, buf, p - buf);
+    return ESP_FAIL;
+  }
+
+  if (httpd_req_recv(req, (char *)data, sizeof data) != sizeof data) {
+    httpd_resp_set_status(req, "400 Bad Request");
+    PRINT(buf, p, "Invalid content length: %d, expected %d\n", req->content_len,
+          sizeof data);
+    httpd_resp_send(req, buf, p - buf);
+    return ESP_FAIL;
+  }
+
+  xSemaphoreTake(data_mutex, portMAX_DELAY);
+  data1_active = !data1_active;
+  memcpy(data1_active ? data1 : data2, data, sizeof data);
+  xSemaphoreGive(data_mutex);
+
+  PRINT(buf, p, "OK\n");
+  httpd_resp_send(req, buf, p - buf);
+  return ESP_OK;
+}
+
+static esp_err_t post_config_handler(httpd_req_t *req) {
+  char query[512], value[512];
+  esp_err_t err = httpd_req_get_url_query_str(req, query, sizeof query);
+  CHECK_ERR(err, "Failed to get query string");
+
+  // TODO: reduce code duplication
+
+  err = httpd_query_key_value(query, "gol", value, sizeof value);
+  if (err == ESP_OK) {
+    if (strcmp(value, "on") == 0)
+      config.gol_enabled = true;
+    else if (strcmp(value, "off") == 0)
+      config.gol_enabled = false;
+    else
+      return return_error(req, ESP_ERR_INVALID_ARG, __FILE__, __LINE__,
+                          "Invalid value for 'gol': %s", value);
+  }
+
+  err = httpd_query_key_value(query, "bars", value, sizeof value);
+  if (err == ESP_OK) {
+    if (strcmp(value, "on") == 0)
+      config.bars_enabled = true;
+    else if (strcmp(value, "off") == 0)
+      config.bars_enabled = false;
+    else
+      return return_error(req, ESP_ERR_INVALID_ARG, __FILE__, __LINE__,
+                          "Invalid value for 'bars': %s", value);
+  }
+
+  err = httpd_query_key_value(query, "ledmx", value, sizeof value);
+  if (err == ESP_OK) {
+    extern char ledmx_config[32];
+    memset(ledmx_config, 0, sizeof ledmx_config);
+    strcpy(ledmx_config, value);
+  }
+
+  err = httpd_query_key_value(query, "field", value, sizeof value);
+  if (err == ESP_OK) {
+    extern char field_config[32];
+    memset(field_config, 0, sizeof field_config);
+    strcpy(field_config, value);
+  }
+
+  err = httpd_query_key_value(query, "timer", value, sizeof value);
+  if (err == ESP_OK) {
+    uint64_t period = strtoull(value, NULL, 10);
+    extern esp_timer_handle_t timer;
+    ESP_ERROR_CHECK(esp_timer_stop(timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(timer, period));
+  }
+
+  httpd_resp_send(req, "got it", -1);
+  return ESP_OK;
+  // esp_err_t err = httpd_query_key_value(req->query, "gol", (char *)order,
+  // sizeof order);
+}
+
+static httpd_uri_t uri_get = {
+    .uri = "/",
+    .method = HTTP_GET,
+    .handler = get_handler,
+    .user_ctx = NULL,
+};
+
+static httpd_uri_t uri_post_data = {
+    .uri = "/data",
+    .method = HTTP_POST,
+    .handler = post_data_handler,
+    .user_ctx = NULL,
+};
+
+static httpd_uri_t uri_post_config = {
+    .uri = "/config",
+    .method = HTTP_POST,
+    .handler = post_config_handler,
+    .user_ctx = NULL,
+};
+
+void http_start(void) {
+  httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+  httpd_handle_t server = NULL;
+  ESP_ERROR_CHECK(httpd_start(&server, &config));
+  httpd_register_uri_handler(server, &uri_get);
+  httpd_register_uri_handler(server, &uri_post_data);
+  httpd_register_uri_handler(server, &uri_post_config);
+}

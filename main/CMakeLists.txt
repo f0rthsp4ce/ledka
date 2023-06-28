@@ -1,0 +1,10 @@
+idf_component_register(
+  SRCS
+  "bars.c"
+  "globals.c"
+  "http.c"
+  "main.c"
+  "udp.c"
+  "wifi.c"
+  INCLUDE_DIRS
+  ".")
