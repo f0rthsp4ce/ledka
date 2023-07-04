@@ -3,6 +3,7 @@ idf_component_register(
   "bars.c"
   "globals.c"
   "http.c"
+  "life.c"
   "main.c"
   "udp.c"
   "wifi.c"

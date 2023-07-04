@@ -94,8 +94,6 @@ static bool ledmx_mktopo(uint8_t *idxes, char *error) {
   return true;
 }
 
-static bool getpixel(uint8_t *data, uint32_t x, uint32_t y);
-
 // TODO: experiment with ledmx_config and field_config, find the best
 // permutation, and drop this code by making it non-configurable.  Or it is
 // already the best permutation?
@@ -216,51 +214,6 @@ static void ledmx_refresh(void *arg) {
   // 4480 5288 for 4*2 panels
 }
 
-static void putpixel(uint8_t *data, uint32_t x, uint32_t y, bool on) {
-  if (x >= 32 * PANELS_X || y >= 16 * PANELS_Y) {
-    return;
-  }
-  size_t offset = y * 32 * PANELS_X + x;
-  if (on) {
-    data[offset / 8] |= 1 << (offset % 8);
-  } else {
-    data[offset / 8] &= ~(1 << (offset % 8));
-  }
-}
-
-static bool getpixel(uint8_t *data, uint32_t x, uint32_t y) {
-  if (x >= 32 * PANELS_X || y >= 16 * PANELS_Y) {
-    return false;
-  }
-  size_t offset = y * 32 * PANELS_X + x;
-  return data[offset / 8] & (1 << (offset % 8));
-}
-
-static bool getpixel_wrap(uint8_t *data, uint32_t x, uint32_t y) {
-  x = x % (32 * PANELS_X);
-  y = y % (16 * PANELS_Y);
-  size_t offset = y * 32 * PANELS_X + x;
-  return data[offset / 8] & (1 << (offset % 8));
-}
-
-static void life_step(uint8_t *old, uint8_t *new) {
-  for (int y = 0; y < 16 * PANELS_Y; y++) {
-    for (int x = 0; x < 32 * PANELS_X; x++) {
-      int neighbours = 0;
-      for (int dy = -1; dy <= 1; dy++)
-        for (int dx = -1; dx <= 1; dx++)
-          if ((dx | dy) && getpixel_wrap(old, x + dx + 32 * PANELS_X,
-                                         y + dy + 16 * PANELS_Y))
-            neighbours++;
-
-      if (getpixel(old, x, y))
-        putpixel(new, x, y, neighbours == 2 || neighbours == 3);
-      else
-        putpixel(new, x, y, neighbours == 3);
-    }
-  }
-}
-
 esp_err_t example_configure_stdin_stdout(void) {
   static bool configured = false;
   if (configured) {
@@ -322,12 +275,7 @@ void app_main() {
   memset(data1, 0, sizeof data1);
   memset(data2, 0, sizeof data2);
   srand(esp_timer_get_time());
-  for (size_t y = 0; y < 16 * PANELS_Y; y++) {
-    for (size_t x = 0; x < 32 * PANELS_X; x++) {
-      // putpixel(data1, x, y, x == 0 || y == 0 || x == y);
-      putpixel(data1, x, y, rand() % 2);
-    }
-  }
+  life_randomize(data1);
 
   ledmx_init();
   bars_init();
@@ -340,9 +288,19 @@ void app_main() {
 
   ESP_ERROR_CHECK(esp_timer_start_periodic(timer, 10000));
 
+  int randcol = -1;
   while (1) {
     xSemaphoreTake(data_mutex, portMAX_DELAY);
     life_step(data1_active ? data1 : data2, data1_active ? data2 : data1);
+
+    if (life_is_stalled(data1_active ? data2 : data1) && randcol < 0)
+      randcol = 0;
+    if (randcol >= 0) {
+      life_randomize_col(data1_active ? data2 : data1, randcol);
+      if (randcol++ == PANELS_X * 32)
+        randcol = -1;
+    }
+
     data1_active = !data1_active;
     if (config.bars_enabled) {
       bars_step();

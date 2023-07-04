@@ -37,6 +37,12 @@ void bars_draw(void);
 // http.c
 void http_start(void);
 
+// life.c
+void life_randomize(uint8_t *data);
+void life_randomize_col(uint8_t *data, int x);
+void life_step(const uint8_t *old, uint8_t *new);
+bool life_is_stalled(const uint8_t *data);
+
 // wifi.c
 void wifi_start(void);
 
