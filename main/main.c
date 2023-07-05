@@ -306,20 +306,21 @@ void app_main() {
   int randcol = -1;
   while (1) {
     xSemaphoreTake(data_mutex, portMAX_DELAY);
-    life_step(data1_active ? data1 : data2, data1_active ? data2 : data1);
-
-    if (life_is_stalled(data1_active ? data2 : data1) && randcol < 0)
-      randcol = 0;
-    if (randcol >= 0) {
-      life_randomize_col(data1_active ? data2 : data1, randcol);
-      if (randcol++ == PANELS_X * 32)
-        randcol = -1;
+    if (config.gol_enabled) {
+      life_step(data1_active ? data1 : data2, data1_active ? data2 : data1);
+      if (life_is_stalled(data1_active ? data2 : data1) && randcol < 0)
+        randcol = 0;
+      if (randcol >= 0) {
+        life_randomize_col(data1_active ? data2 : data1, randcol);
+        if (randcol++ == PANELS_X * 32)
+          randcol = -1;
+      }
+      data1_active = !data1_active;
     }
 
     if (text_timeout)
       text_timeout--;
 
-    data1_active = !data1_active;
     if (config.bars_enabled) {
       bars_step();
       bars_draw();
