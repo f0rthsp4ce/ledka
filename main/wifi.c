@@ -13,8 +13,9 @@
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
 
-/* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group;
+static esp_event_handler_instance_t s_instance_any_id;
+static esp_event_handler_instance_t s_instance_got_ip;
 static int s_retry_num = 0;
 
 static void event_handler(void *arg, esp_event_base_t event_base,
@@ -26,6 +27,9 @@ static void event_handler(void *arg, esp_event_base_t event_base,
     if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY) {
       esp_wifi_connect();
       s_retry_num++;
+      char buf[32];
+      sprintf(buf, "retry %d", s_retry_num);
+      draw_text(buf, 64, 12);
       ESP_LOGI(TAG, "retry to connect to the AP");
     } else {
       xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
@@ -67,12 +71,10 @@ void wifi_start(void) {
   ESP_ERROR_CHECK(esp_wifi_init(&wifi_init_config));
   ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
 
-  esp_event_handler_instance_t instance_any_id;
-  esp_event_handler_instance_t instance_got_ip;
   ESP_ERROR_CHECK(esp_event_handler_instance_register(
-      WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL, &instance_any_id));
+      WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL, &s_instance_any_id));
   ESP_ERROR_CHECK(esp_event_handler_instance_register(
-      IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL, &instance_got_ip));
+      IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL, &s_instance_got_ip));
 
   wifi_config_t wifi_config = {
       .sta =
@@ -89,7 +91,9 @@ void wifi_start(void) {
   ESP_ERROR_CHECK(esp_wifi_start());
 
   ESP_LOGI(TAG, "wifi_init_sta finished.");
+}
 
+void wifi_wait(void) {
   /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or
    * connection failed for the maximum number of re-tries (WIFI_FAIL_BIT). The
    * bits are set by event_handler() (see above) */
@@ -109,8 +113,8 @@ void wifi_start(void) {
 
   /* The event will not be processed after unregister */
   ESP_ERROR_CHECK(esp_event_handler_instance_unregister(
-      IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
+      IP_EVENT, IP_EVENT_STA_GOT_IP, s_instance_got_ip));
   ESP_ERROR_CHECK(esp_event_handler_instance_unregister(
-      WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
+      WIFI_EVENT, ESP_EVENT_ANY_ID, s_instance_any_id));
   vEventGroupDelete(s_wifi_event_group);
 }
