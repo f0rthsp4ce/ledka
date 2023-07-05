@@ -65,7 +65,7 @@ static void ledmx_init(void) {
   }
 }
 
-static bool ledmx_mktopo(uint8_t *idxes, char *error) {
+bool ledmx_mktopo(uint8_t *idxes, char *error) {
   for (uint16_t i = 0; i < sizeof config.order / sizeof config.order[0]; i++)
     config.order[i] = 0xffff;
 

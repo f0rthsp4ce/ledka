@@ -50,6 +50,7 @@ void life_step(const uint8_t *old, uint8_t *new);
 bool life_is_stalled(const uint8_t *data);
 
 // text.c
+void draw_panels_hint(uint8_t *topo);
 void draw_text(const char *text, uint16_t pos_x, uint16_t pos_y);
 
 // wifi.c

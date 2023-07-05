@@ -71,7 +71,9 @@ static esp_err_t post_data_handler(httpd_req_t *req) {
 }
 
 static esp_err_t post_config_handler(httpd_req_t *req) {
-  char query[512], value[512];
+  // XXX: using static to avoid stack overflow
+  static char query[512], value[512];
+
   esp_err_t err = httpd_req_get_url_query_str(req, query, sizeof query);
   CHECK_ERR(err, "Failed to get query string");
 
@@ -97,6 +99,37 @@ static esp_err_t post_config_handler(httpd_req_t *req) {
     else
       return return_error(req, ESP_ERR_INVALID_ARG, __FILE__, __LINE__,
                           "Invalid value for 'bars': %s", value);
+  }
+
+  err = httpd_query_key_value(query, "topo", value, sizeof value);
+  if (err == ESP_OK) {
+    uint8_t topo[PANELS_X * PANELS_Y] = {0}, *p = topo;
+    for (char *pv = value; *pv; pv++) {
+      printf("Handling '%c'\n", *pv);
+      if (*pv == ',' && p < topo + sizeof topo - 1)
+        p++;
+      else if (*pv >= '0' && *pv <= '9')
+        *p = *p * 10 + (*pv - '0');
+      else if (*pv == 'r')
+        *p |= 0x80;
+      else
+        goto error;
+    }
+    if (p != topo + sizeof topo - 1) {
+    error:
+      printf("Wrong size: %d\n", p - topo);
+      return return_error(req, ESP_ERR_INVALID_ARG, __FILE__, __LINE__,
+                          "Invalid value for 'topo': %s", value);
+    }
+
+    draw_panels_hint(topo);
+    text_timeout = 500;
+    bool ledmx_mktopo(uint8_t * idxes, char *error);
+    char error[128];
+    error[0] = 0;
+    if (!ledmx_mktopo(topo, error))
+      return return_error(req, ESP_ERR_INVALID_ARG, __FILE__, __LINE__,
+                          "Invalid value for 'topo': %s", error);
   }
 
   err = httpd_query_key_value(query, "ledmx", value, sizeof value);
