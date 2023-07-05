@@ -1,5 +1,9 @@
+#ifdef ESP_PLATFORM
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#endif
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 // Common
@@ -12,7 +16,9 @@
 #define WIFI_ENABLED
 
 // globals.c
+#ifdef ESP_PLATFORM
 extern SemaphoreHandle_t data_mutex;
+#endif
 extern bool data1_active;
 extern uint8_t data1[64 * PANELS_X * PANELS_Y];
 extern uint8_t data2[64 * PANELS_X * PANELS_Y];
@@ -23,8 +29,10 @@ extern uint8_t data_text_mask[64 * PANELS_X * PANELS_Y];
 
 extern uint16_t text_timeout;
 
+#ifdef ESP_PLATFORM
 extern SemaphoreHandle_t config_mutex;
-struct config_t {
+#endif
+extern struct config_t {
   uint16_t order[16 * PANELS_X * PANELS_Y];
   bool gol_enabled;
   bool bars_enabled;

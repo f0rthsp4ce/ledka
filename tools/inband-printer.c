@@ -4,48 +4,13 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "lib.h"
+
 static void print_life(const uint8_t *data, size_t len) {
   size_t width = data[0] | (data[1] << 8);
   size_t height = data[2] | (data[3] << 8);
-  data += 4;
-
   static char buf[1024 * 1024];
-  char *p = buf;
-
-  for (size_t y = 0; y < height / 2; y++) {
-    const uint8_t *row1 = data + (y * 2) * width / 8;
-    const uint8_t *row2 = data + (y * 2 + 1) * width / 8;
-
-    for (size_t x = 0; x < width / 8; x++) {
-      uint8_t c1 = row1[x], c2 = row2[x];
-      for (int i = 0; i < 8; i++) {
-
-        switch (((c1 >> i) & 1) | (((c2 >> i) & 1) << 1)) {
-        case 0:
-          *p++ = ' ';
-          break;
-        case 1:
-          *p++ = 0xe2;
-          *p++ = 0x96;
-          *p++ = 0x80;
-          break;
-        case 2:
-          *p++ = 0xe2;
-          *p++ = 0x96;
-          *p++ = 0x84;
-          break;
-        case 3:
-          *p++ = 0xe2;
-          *p++ = 0x96;
-          *p++ = 0x88;
-          break;
-        }
-      }
-    }
-    *p++ = '|';
-    *p++ = '\n';
-  }
-  *p = 0;
+  render_life(buf, width, height, data + 4);
   printf("\033[2J\033[3J\033[H%s", buf);
 }
 
