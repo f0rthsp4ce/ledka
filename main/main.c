@@ -70,12 +70,14 @@ static bool ledmx_mktopo(uint8_t *idxes, char *error) {
     config.order[i] = 0xffff;
 
   for (uint8_t i = 0; i < PANELS_X * PANELS_Y; i++) {
-    if (idxes[i] >= PANELS_X * PANELS_Y) {
+    uint8_t idx = idxes[i] & 0x7f;
+    bool reverse = !!(idxes[i] & 0x80);
+    if (idx >= PANELS_X * PANELS_Y) {
       if (error)
         sprintf(error, "idxes[%d]=%d out of range", i, idxes[i]);
       return false;
     }
-    uint16_t base = 16 * (PANELS_X * PANELS_Y - 1 - idxes[i]);
+    uint16_t base = 16 * (PANELS_X * PANELS_Y - 1 - idx);
     if (config.order[base] != 0xffff) {
       if (error)
         sprintf(error, "idxes[%d]=%d already set", i, idxes[i]);
@@ -83,10 +85,20 @@ static bool ledmx_mktopo(uint8_t *idxes, char *error) {
     }
 
     for (uint8_t j = 0; j < 16; j++) {
-      uint8_t x = 3 - (j / 4) + (i % PANELS_X) * 4;
-      uint8_t y = j % 4 + (i / PANELS_X) * 4;
+      uint8_t x = j / 4;
+      uint8_t y = j % 4;
+      if (reverse)
+        y = 3 - y;
+      else
+        x = 3 - x;
+
+      x += (i % PANELS_X) * 4;
+      y += (i / PANELS_X) * 4;
+
       y *= 4; // 4 fields per panel
       config.order[base + j] = x + y * PANELS_X * 4;
+      if (reverse)
+        config.order[base + j] |= 0x8000;
     }
   }
   if (error)
@@ -127,11 +139,16 @@ static void ledmx_refresh(void *arg) {
 
       case '2':
         for (int i = 0; i < 16 * PANELS_X * PANELS_Y; i++) {
-          size_t idx = config.order[i] + field * PANELS_X * 4;
+          bool reverse = config.order[i] & 0x8000;
+          size_t idx = (config.order[i] & 0x7fff) +
+                       (reverse ? 3 - field : field) * PANELS_X * 4;
           uint8_t byte = data_life[idx] | data_bars[idx];
           if (text_timeout)
             byte = (byte & data_text_mask[idx]) | data_text[idx];
-          ledmx_write_byte_rev(~byte);
+          if (reverse)
+            ledmx_write_byte(~byte);
+          else
+            ledmx_write_byte_rev(~byte);
         }
         break;
 
