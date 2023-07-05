@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-static void putpixel(uint8_t *data, uint32_t x, uint32_t y, bool on) {
+void putpixel(uint8_t *data, uint32_t x, uint32_t y, bool on) {
   if (x >= 32 * PANELS_X || y >= 16 * PANELS_Y)
     return;
   size_t offset = y * 32 * PANELS_X + x;

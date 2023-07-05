@@ -127,6 +127,34 @@ static esp_err_t post_config_handler(httpd_req_t *req) {
   // sizeof order);
 }
 
+static esp_err_t post_text_handler(httpd_req_t *req) {
+  char query[512], value[512];
+  esp_err_t err = httpd_req_get_url_query_str(req, query, sizeof query);
+  CHECK_ERR(err, "Failed to get query string");
+
+  // TODO: escapes, e.g. %0A for newline
+  unsigned long long timeout = 100, pos_x = 0, pos_y = 0;
+
+  err = httpd_query_key_value(query, "timeout", value, sizeof value);
+  if (err == ESP_OK)
+    timeout = strtoull(value, NULL, 10);
+  err = httpd_query_key_value(query, "x", value, sizeof value);
+  if (err == ESP_OK)
+    pos_x = strtoull(value, NULL, 10);
+  err = httpd_query_key_value(query, "y", value, sizeof value);
+  if (err == ESP_OK)
+    pos_y = strtoull(value, NULL, 10);
+
+  err = httpd_query_key_value(query, "text", value, sizeof value);
+  CHECK_ERR(err, "Failed to get text");
+
+  draw_text(value, pos_x, pos_y);
+  text_timeout = timeout;
+
+  httpd_resp_send(req, "got it", -1);
+  return ESP_OK;
+}
+
 static httpd_uri_t uri_get = {
     .uri = "/",
     .method = HTTP_GET,
@@ -148,6 +176,13 @@ static httpd_uri_t uri_post_config = {
     .user_ctx = NULL,
 };
 
+static httpd_uri_t uri_post_text = {
+    .uri = "/text",
+    .method = HTTP_POST,
+    .handler = post_text_handler,
+    .user_ctx = NULL,
+};
+
 void http_start(void) {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   httpd_handle_t server = NULL;
@@ -155,4 +190,5 @@ void http_start(void) {
   httpd_register_uri_handler(server, &uri_get);
   httpd_register_uri_handler(server, &uri_post_data);
   httpd_register_uri_handler(server, &uri_post_config);
+  httpd_register_uri_handler(server, &uri_post_text);
 }

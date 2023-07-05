@@ -103,11 +103,7 @@ char field_config[32] = "01,23";
 static void ledmx_refresh(void *arg) {
   uint64_t start = esp_timer_get_time();
 
-  uint8_t *data_a = data1_active ? data1 : data2;
-  uint8_t *data_b = data3_active ? data3 : data4;
-  static int draw_a_counter = 0;
-  if (++draw_a_counter == 1)
-    draw_a_counter = 0;
+  uint8_t *data_life = data1_active ? data1 : data2;
 #ifdef OUTPUT_LED
 
   static size_t fc = 0;
@@ -131,9 +127,10 @@ static void ledmx_refresh(void *arg) {
 
       case '2':
         for (int i = 0; i < 16 * PANELS_X * PANELS_Y; i++) {
-          uint8_t byte = data_b[config.order[i] + field * PANELS_X * 4];
-          if (draw_a_counter == 0)
-            byte |= data_a[config.order[i] + field * PANELS_X * 4];
+          size_t idx = config.order[i] + field * PANELS_X * 4;
+          uint8_t byte = data_life[idx] | data_bars[idx];
+          if (text_timeout)
+            byte = (byte & data_text_mask[idx]) | data_text[idx];
           ledmx_write_byte_rev(~byte);
         }
         break;
@@ -300,6 +297,9 @@ void app_main() {
       if (randcol++ == PANELS_X * 32)
         randcol = -1;
     }
+
+    if (text_timeout)
+      text_timeout--;
 
     data1_active = !data1_active;
     if (config.bars_enabled) {

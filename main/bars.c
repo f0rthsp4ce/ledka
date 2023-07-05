@@ -49,7 +49,7 @@ void bars_step(void) {
 
 void bars_draw(void) {
   uint8_t *data_a = data1_active ? data1 : data2;
-  uint8_t *data_b = data3_active ? data3 : data4;
+  uint8_t *data_b = data_bars;
 
   for (int y = 0; y < BAR_HEIGHT; y++) {
     uint8_t *row_a = data_a + (BAR_POS_X / 8) + (y + BAR_POS_Y) * 4 * PANELS_X;
