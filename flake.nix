@@ -47,6 +47,8 @@
             # other
             nixpkgs-old.legacyPackages.${system}.ccache
           ];
+          # required by gdb
+          LD_LIBRARY_PATH = "${nixpkgs-old.legacyPackages.${system}.python2}/lib";
         };
         devShells.default = pkgs.mkShell {
           hardeningDisable = [ "all" ];
