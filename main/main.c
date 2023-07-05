@@ -106,10 +106,9 @@ bool ledmx_mktopo(uint8_t *idxes, char *error) {
   return true;
 }
 
-// TODO: experiment with ledmx_config and field_config, find the best
+// TODO: experiment with field_config, find the best
 // permutation, and drop this code by making it non-configurable.  Or it is
 // already the best permutation?
-char ledmx_config[32] = "01256347";
 char field_config[32] = "01,23";
 
 static void ledmx_refresh(void *arg) {
@@ -124,71 +123,28 @@ static void ledmx_refresh(void *arg) {
   if (field_config[fc] == 0)
     fc = 0;
 
-  // for (int field = 0; field < 4; field++) {
   for (; field_config[fc] && field_config[fc] != ','; fc++) {
     int field = field_config[fc] - '0';
 
-    for (char *conf = ledmx_config; *conf; conf++) {
-      switch (*conf) {
-      case '0':
-        gpio_set_level(LEDMX_PIN_DATA, 0);
-        break;
-      case '1':
-        gpio_set_level(LEDMX_PIN_OE, 1);
-        break;
-
-      case '2':
-        for (int i = 0; i < 16 * PANELS_X * PANELS_Y; i++) {
-          bool reverse = config.order[i] & 0x8000;
-          size_t idx = (config.order[i] & 0x7fff) +
-                       (reverse ? 3 - field : field) * PANELS_X * 4;
-          uint8_t byte = data_life[idx] | data_bars[idx];
-          if (text_timeout)
-            byte = (byte & data_text_mask[idx]) | data_text[idx];
-          if (reverse)
-            ledmx_write_byte(~byte);
-          else
-            ledmx_write_byte_rev(~byte);
-        }
-        break;
-
-      case '3':
-        gpio_set_level(LEDMX_PIN_SCLK, 1);
-        break;
-      case '4':
-        gpio_set_level(LEDMX_PIN_SCLK, 0);
-        break;
-      case '5':
-        gpio_set_level(LEDMX_PIN_A, (field & 1) == 0);
-        break;
-      case '6':
-        gpio_set_level(LEDMX_PIN_B, (field & 2) == 0);
-        break;
-      case '7':
-        gpio_set_level(LEDMX_PIN_OE, 0);
-        break;
-      case 'a':
-        for (volatile int i = 0; i < 10; i++)
-          ;
-        break;
-      case 'b':
-        for (volatile int i = 0; i < 100; i++)
-          ;
-        break;
-      case 'c':
-        for (volatile int i = 0; i < 1000; i++)
-          ;
-        break;
-      case 'd':
-        for (volatile int i = 0; i < 10000; i++)
-          ;
-        break;
-      case 'e':
-        for (volatile int i = 0; i < 100000; i++)
-          ;
-        break;
-      }
+    gpio_set_level(LEDMX_PIN_DATA, 0);
+    gpio_set_level(LEDMX_PIN_OE, 1);
+    for (int i = 0; i < 16 * PANELS_X * PANELS_Y; i++) {
+      bool reverse = config.order[i] & 0x8000;
+      size_t idx = (config.order[i] & 0x7fff) +
+                   (reverse ? 3 - field : field) * PANELS_X * 4;
+      uint8_t byte = data_life[idx] | data_bars[idx];
+      if (text_timeout)
+        byte = (byte & data_text_mask[idx]) | data_text[idx];
+      if (reverse)
+        ledmx_write_byte(~byte);
+      else
+        ledmx_write_byte_rev(~byte);
     }
+    gpio_set_level(LEDMX_PIN_A, (field & 1) == 0);
+    gpio_set_level(LEDMX_PIN_B, (field & 2) == 0);
+    gpio_set_level(LEDMX_PIN_SCLK, 1);
+    gpio_set_level(LEDMX_PIN_SCLK, 0);
+    gpio_set_level(LEDMX_PIN_OE, 0);
   }
 #endif
 

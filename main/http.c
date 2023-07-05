@@ -132,13 +132,6 @@ static esp_err_t post_config_handler(httpd_req_t *req) {
                           "Invalid value for 'topo': %s", error);
   }
 
-  err = httpd_query_key_value(query, "ledmx", value, sizeof value);
-  if (err == ESP_OK) {
-    extern char ledmx_config[32];
-    memset(ledmx_config, 0, sizeof ledmx_config);
-    strcpy(ledmx_config, value);
-  }
-
   err = httpd_query_key_value(query, "field", value, sizeof value);
   if (err == ESP_OK) {
     extern char field_config[32];
