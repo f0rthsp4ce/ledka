@@ -18,3 +18,5 @@ struct config_t config = {
     .gol_enabled = true,
     .bars_enabled = true,
 };
+
+struct stats_t stats = {0};

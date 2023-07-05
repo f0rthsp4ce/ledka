@@ -38,6 +38,14 @@ extern struct config_t {
   bool bars_enabled;
 } config;
 
+extern struct stats_t {
+  uint32_t render_time[512];
+  uint32_t data_update_time[512];
+  int64_t last_data_time;
+  size_t render_time_pos;
+  size_t data_update_time_pos;
+} stats;
+
 // bars.c
 void bars_init(void);
 void bars_set(const uint8_t *values, size_t count);

@@ -1,9 +1,16 @@
 #include <esp_http_server.h>
+#include <inttypes.h>
 #include <stdarg.h>
 
 #include "main.h"
 
 #define PRINT(BUF, P, ...) P += snprintf(P, BUF + sizeof BUF - P, __VA_ARGS__)
+#define FLUSH()                                                                \
+  do {                                                                         \
+    if (p != buf)                                                              \
+      httpd_resp_send_chunk(req, buf, p - buf);                                \
+    p = buf;                                                                   \
+  } while (0)
 #define CHECK_ERR(ERR, MSG, ...)                                               \
   do {                                                                         \
     if ((ERR) != ESP_OK)                                                       \
@@ -41,6 +48,26 @@ static esp_err_t get_handler(httpd_req_t *req) {
   return ESP_OK;
 }
 
+static esp_err_t get_stats_handler(httpd_req_t *req) {
+  char buf[1024], *p = buf;
+  PRINT(buf, p, "{\n  \"data_update_time\": [");
+  const size_t n =
+      sizeof stats.data_update_time / sizeof *stats.data_update_time;
+  for (size_t i = 0; i < n; i++) {
+    if (i != 0)
+      PRINT(buf, p, ",");
+    PRINT(buf, p, "%" PRIu32,
+          stats.data_update_time[(i + stats.data_update_time_pos) % n]);
+    if (p - buf > sizeof buf - 32)
+      FLUSH();
+  }
+  FLUSH();
+  PRINT(buf, p, "]\n}\n");
+  FLUSH();
+  httpd_resp_send_chunk(req, buf, 0);
+  return ESP_OK;
+}
+
 static esp_err_t post_data_handler(httpd_req_t *req) {
   char buf[1024], *p = buf;
   uint8_t data[sizeof data1];
@@ -61,6 +88,13 @@ static esp_err_t post_data_handler(httpd_req_t *req) {
   }
 
   xSemaphoreTake(data_mutex, portMAX_DELAY);
+  const int64_t t = esp_timer_get_time();
+  stats.data_update_time[stats.data_update_time_pos++] =
+      t - stats.last_data_time;
+  stats.last_data_time = t;
+  stats.data_update_time_pos %=
+      sizeof stats.data_update_time / sizeof *stats.data_update_time;
+
   data1_active = !data1_active;
   memcpy(data1_active ? data1 : data2, data, sizeof data);
   xSemaphoreGive(data_mutex);
@@ -188,6 +222,13 @@ static httpd_uri_t uri_get = {
     .user_ctx = NULL,
 };
 
+static httpd_uri_t uri_get_stats = {
+    .uri = "/stats",
+    .method = HTTP_GET,
+    .handler = get_stats_handler,
+    .user_ctx = NULL,
+};
+
 static httpd_uri_t uri_post_data = {
     .uri = "/data",
     .method = HTTP_POST,
@@ -214,6 +255,7 @@ void http_start(void) {
   httpd_handle_t server = NULL;
   ESP_ERROR_CHECK(httpd_start(&server, &config));
   httpd_register_uri_handler(server, &uri_get);
+  httpd_register_uri_handler(server, &uri_get_stats);
   httpd_register_uri_handler(server, &uri_post_data);
   httpd_register_uri_handler(server, &uri_post_config);
   httpd_register_uri_handler(server, &uri_post_text);
