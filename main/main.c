@@ -277,11 +277,12 @@ void app_main() {
   // esp_timer_handle_t timer;
   ESP_ERROR_CHECK(esp_timer_create(&args, &timer));
 
+  const uint8_t rev = 0x80;
   ledmx_mktopo(
       (uint8_t[]){
           // clang-format off
-          1, 2, 3, 4,
-          0, 5, 6, 7,
+          rev|5, rev|4, rev|3, rev|0,
+          rev|6, rev|7, rev|2, rev|1,
           // clang-format on
       },
       NULL);
