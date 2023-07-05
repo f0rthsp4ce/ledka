@@ -16,6 +16,7 @@
 
 static void serve(void *);
 static void art_net_handler(const uint8_t *, size_t);
+static void data_handler(const uint8_t *, size_t);
 
 void udp_start(void) {
   xTaskCreate(serve, "udp_server", 4096, NULL /* arg */, 5, NULL);
@@ -42,7 +43,11 @@ static void serve(void *arg) {
     ssize_t recv_len =
         recvfrom(s, buf, buf_len, 0, (struct sockaddr *)&si_other, &slen);
     CHECK(recv_len > 1, continue);
-    art_net_handler(buf, recv_len);
+
+    if (recv_len >= 8 && !memcmp(buf, "Art-Net\0", 8))
+      art_net_handler(buf, recv_len);
+    else if (recv_len >= 1 && !memcmp(buf, "D", 1))
+      data_handler(buf + 1, recv_len - 1);
 
     // buf[recv_len] = 0;
     // printf("Received packet from %s:%d\nData: %s\n\n",
@@ -169,4 +174,22 @@ static void send_poll_reply(void) {
   buf[211] = 1;            // Bind index (1 - root device)
   buf[212] = 0xe; // Status2: Supports Art-Net III and got an address by DHCP
   memset(buf + 213, 0, 26);
+}
+
+static void data_handler(const uint8_t *buf, size_t packet_len) {
+  if (packet_len != 64 * PANELS_X * PANELS_Y) {
+    printf("Unexpected packet length: %zu\n", packet_len);
+    return;
+  }
+  xSemaphoreTake(data_mutex, portMAX_DELAY);
+  const int64_t t = esp_timer_get_time();
+  stats.data_update_time[stats.data_update_time_pos++] =
+      t - stats.last_data_time;
+  stats.last_data_time = t;
+  stats.data_update_time_pos %=
+      sizeof stats.data_update_time / sizeof *stats.data_update_time;
+
+  data1_active = !data1_active;
+  memcpy(data1_active ? data1 : data2, buf, packet_len);
+  xSemaphoreGive(data_mutex);
 }
