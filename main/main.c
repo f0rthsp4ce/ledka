@@ -238,7 +238,7 @@ void app_main() {
       (uint8_t[]){
           // clang-format off
           rev|5, rev|4, rev|3, rev|0,
-          rev|6, rev|7, rev|2, rev|1,
+          rev|7, rev|6, rev|2, rev|1,
           // clang-format on
       },
       NULL);
