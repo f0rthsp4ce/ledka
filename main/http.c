@@ -221,8 +221,9 @@ static esp_err_t post_config_handler(httpd_req_t *req) {
 
   err = query_get_value_str(query, "field", value, sizeof value);
   if (err == ESP_OK) {
-    extern char field_config[32];
+    extern char field_config[128];
     memset(field_config, 0, sizeof field_config);
+    // TODO: check length
     strcpy(field_config, value);
   }
   CHECK_ERR_QUERY_VALUE(err, false);
