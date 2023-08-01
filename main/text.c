@@ -45,7 +45,7 @@ void draw_text(const char *text, uint16_t pos_x, uint16_t pos_y) {
   size_t px = pos_x + 1, py = pos_y + 1;
   for (; *text; text++) {
     if (*text == '\n') {
-      px = 1;
+      px = pos_x + 1;
       py += 6;
       continue;
     }
