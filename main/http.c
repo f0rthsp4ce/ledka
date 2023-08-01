@@ -1,8 +1,11 @@
+#include <errno.h>
 #include <esp_http_server.h>
 #include <inttypes.h>
 #include <stdarg.h>
 
 #include "main.h"
+
+static const char *query_last_key = NULL;
 
 #define PRINT(BUF, P, ...) P += snprintf(P, BUF + sizeof BUF - P, __VA_ARGS__)
 #define FLUSH()                                                                \
@@ -17,6 +20,32 @@
       return return_error(req, (ERR), __FILE__, __LINE__, (MSG),               \
                           ##__VA_ARGS__);                                      \
   } while (0)
+#define CHECK_ERR_QUERY_VALUE(ERR, REQUIRED)                                   \
+  do {                                                                         \
+    if ((ERR) != ESP_OK && ((REQUIRED) || (ERR) != ESP_ERR_NOT_FOUND))         \
+      return return_error(req, (ERR), __FILE__, __LINE__,                      \
+                          "Invalid value for '%s'", query_last_key);           \
+  } while (0)
+
+static int hexdig(char c) {
+  return c >= '0' && c <= '9'   ? c - '0'
+         : c >= 'a' && c <= 'f' ? c - 'a' + 10
+         : c >= 'A' && c <= 'F' ? c - 'A' + 10
+                                : -1;
+}
+
+static void uri_decode(char *buf) {
+  char *out = buf;
+  int h1, h2;
+  while (*buf)
+    if (*buf == '%' && (h1 = hexdig(buf[1])) >= 0 && (h2 = hexdig(buf[2])) >= 0)
+      *out++ = (h1 << 4) | h2, buf += 3;
+    else if (*buf == '+')
+      *out++ = ' ', buf++;
+    else
+      *out++ = *buf++;
+  *out = '\0';
+}
 
 static esp_err_t return_error(httpd_req_t *req, esp_err_t err, const char *file,
                               int line, const char *msg, ...) {
@@ -36,6 +65,42 @@ static esp_err_t return_error(httpd_req_t *req, esp_err_t err, const char *file,
 
   httpd_resp_send(req, buf, p - buf);
   return ESP_OK;
+}
+
+static esp_err_t query_get_value_str(const char *qry, const char *key,
+                                     char *value, size_t value_len) {
+  query_last_key = key;
+  esp_err_t rc = httpd_query_key_value(qry, key, value, value_len);
+  if (rc == ESP_OK)
+    uri_decode(value);
+  return rc;
+}
+
+static esp_err_t query_get_value_bool(const char *qry, const char *key,
+                                      char *buf, size_t buf_len, bool *val) {
+  esp_err_t rc = query_get_value_str(qry, key, buf, buf_len);
+  if (rc == ESP_OK) {
+    if (!strcmp(buf, "on"))
+      return *val = true, ESP_OK;
+    if (!strcmp(buf, "off"))
+      return *val = false, ESP_OK;
+    return ESP_ERR_INVALID_ARG;
+  }
+  return rc;
+}
+
+static esp_err_t query_get_value_ull(const char *qry, const char *key,
+                                     char *buf, size_t buf_len,
+                                     unsigned long long *val) {
+  esp_err_t rc = query_get_value_str(qry, key, buf, buf_len);
+  if (rc == ESP_OK) {
+    char *end;
+    errno = 0;
+    *val = strtoull(buf, &end, 10);
+    if (*end || errno)
+      return ESP_ERR_INVALID_ARG;
+  }
+  return rc;
 }
 
 static esp_err_t get_handler(httpd_req_t *req) {
@@ -107,33 +172,21 @@ static esp_err_t post_data_handler(httpd_req_t *req) {
 static esp_err_t post_config_handler(httpd_req_t *req) {
   // XXX: using static to avoid stack overflow
   static char query[512], value[512];
+  bool bval;
+  unsigned long long ullval;
 
   esp_err_t err = httpd_req_get_url_query_str(req, query, sizeof query);
   CHECK_ERR(err, "Failed to get query string");
 
-  // TODO: reduce code duplication
+  err = query_get_value_bool(query, "gol", value, sizeof value, &bval);
+  if (err == ESP_OK)
+    config.gol_enabled = bval;
+  CHECK_ERR_QUERY_VALUE(err, false);
 
-  err = httpd_query_key_value(query, "gol", value, sizeof value);
-  if (err == ESP_OK) {
-    if (strcmp(value, "on") == 0)
-      config.gol_enabled = true;
-    else if (strcmp(value, "off") == 0)
-      config.gol_enabled = false;
-    else
-      return return_error(req, ESP_ERR_INVALID_ARG, __FILE__, __LINE__,
-                          "Invalid value for 'gol': %s", value);
-  }
-
-  err = httpd_query_key_value(query, "bars", value, sizeof value);
-  if (err == ESP_OK) {
-    if (strcmp(value, "on") == 0)
-      config.bars_enabled = true;
-    else if (strcmp(value, "off") == 0)
-      config.bars_enabled = false;
-    else
-      return return_error(req, ESP_ERR_INVALID_ARG, __FILE__, __LINE__,
-                          "Invalid value for 'bars': %s", value);
-  }
+  err = query_get_value_bool(query, "bars", value, sizeof value, &bval);
+  if (err == ESP_OK)
+    config.bars_enabled = bval;
+  CHECK_ERR_QUERY_VALUE(err, false);
 
   err = httpd_query_key_value(query, "topo", value, sizeof value);
   if (err == ESP_OK) {
@@ -166,47 +219,42 @@ static esp_err_t post_config_handler(httpd_req_t *req) {
                           "Invalid value for 'topo': %s", error);
   }
 
-  err = httpd_query_key_value(query, "field", value, sizeof value);
+  err = query_get_value_str(query, "field", value, sizeof value);
   if (err == ESP_OK) {
     extern char field_config[32];
     memset(field_config, 0, sizeof field_config);
     strcpy(field_config, value);
   }
+  CHECK_ERR_QUERY_VALUE(err, false);
 
-  err = httpd_query_key_value(query, "timer", value, sizeof value);
+  err = query_get_value_ull(query, "timer", value, sizeof value, &ullval);
   if (err == ESP_OK) {
-    uint64_t period = strtoull(value, NULL, 10);
     extern esp_timer_handle_t timer;
     ESP_ERROR_CHECK(esp_timer_stop(timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(timer, period));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(timer, ullval));
   }
+  CHECK_ERR_QUERY_VALUE(err, false);
 
   httpd_resp_send(req, "got it", -1);
   return ESP_OK;
-  // esp_err_t err = httpd_query_key_value(req->query, "gol", (char *)order,
-  // sizeof order);
 }
 
 static esp_err_t post_text_handler(httpd_req_t *req) {
   char query[512], value[512];
+  unsigned long long ullval;
   esp_err_t err = httpd_req_get_url_query_str(req, query, sizeof query);
   CHECK_ERR(err, "Failed to get query string");
 
-  // TODO: escapes, e.g. %0A for newline
   unsigned long long timeout = 100, pos_x = 0, pos_y = 0;
 
-  err = httpd_query_key_value(query, "timeout", value, sizeof value);
-  if (err == ESP_OK)
-    timeout = strtoull(value, NULL, 10);
-  err = httpd_query_key_value(query, "x", value, sizeof value);
-  if (err == ESP_OK)
-    pos_x = strtoull(value, NULL, 10);
-  err = httpd_query_key_value(query, "y", value, sizeof value);
-  if (err == ESP_OK)
-    pos_y = strtoull(value, NULL, 10);
-
-  err = httpd_query_key_value(query, "text", value, sizeof value);
-  CHECK_ERR(err, "Failed to get text");
+  err = query_get_value_ull(query, "timeout", value, sizeof value, &timeout);
+  CHECK_ERR_QUERY_VALUE(err, false);
+  err = query_get_value_ull(query, "x", value, sizeof value, &pos_x);
+  CHECK_ERR_QUERY_VALUE(err, false);
+  err = query_get_value_ull(query, "y", value, sizeof value, &pos_y);
+  CHECK_ERR_QUERY_VALUE(err, false);
+  err = query_get_value_str(query, "text", value, sizeof value);
+  CHECK_ERR_QUERY_VALUE(err, true);
 
   draw_text(value, pos_x, pos_y);
   text_timeout = timeout;
