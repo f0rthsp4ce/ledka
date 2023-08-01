@@ -109,7 +109,7 @@ bool ledmx_mktopo(uint8_t *idxes, char *error) {
 // TODO: experiment with field_config, find the best
 // permutation, and drop this code by making it non-configurable.  Or it is
 // already the best permutation?
-char field_config[128] = "01,!0!1,,,,,,,23,!2!3,,,,,,";
+char field_config[128] = "01,23";
 
 static void ledmx_refresh(void *arg) {
   uint64_t start = esp_timer_get_time();
@@ -124,19 +124,10 @@ static void ledmx_refresh(void *arg) {
     fc = 0;
 
   for (; field_config[fc] && field_config[fc] != ','; fc++) {
-    bool zero = false;
-    if (field_config[fc] == '!')
-      fc++, zero = true;
     int field = field_config[fc] - '0';
 
-    gpio_set_level(LEDMX_PIN_DATA, 0);
     gpio_set_level(LEDMX_PIN_OE, 1);
     for (int i = 0; i < 16 * PANELS_X * PANELS_Y; i++) {
-      if (zero) {
-        ledmx_write_byte(0xff);
-        continue;
-      }
-
       bool reverse = config.order[i] & 0x8000;
       size_t idx = (config.order[i] & 0x7fff) +
                    (reverse ? 3 - field : field) * PANELS_X * 4;
@@ -150,6 +141,15 @@ static void ledmx_refresh(void *arg) {
     }
     gpio_set_level(LEDMX_PIN_A, (field & 1) == 0);
     gpio_set_level(LEDMX_PIN_B, (field & 2) == 0);
+    gpio_set_level(LEDMX_PIN_SCLK, 1);
+    gpio_set_level(LEDMX_PIN_SCLK, 0);
+
+    // Send zeroes to reduce brightness
+    gpio_set_level(LEDMX_PIN_DATA, 1);
+    for (int i = 0; i < 8 * 16 * PANELS_X * PANELS_Y; i++) {
+      gpio_set_level(LEDMX_PIN_CLK, 0);
+      gpio_set_level(LEDMX_PIN_CLK, 1);
+    }
     gpio_set_level(LEDMX_PIN_SCLK, 1);
     gpio_set_level(LEDMX_PIN_SCLK, 0);
     gpio_set_level(LEDMX_PIN_OE, 0);
@@ -263,7 +263,7 @@ void app_main() {
   udp_start();
 #endif
 
-  ESP_ERROR_CHECK(esp_timer_start_periodic(timer, 10000 / 8));
+  ESP_ERROR_CHECK(esp_timer_start_periodic(timer, 10000));
 
   int randcol = -1;
   while (1) {
