@@ -61,7 +61,8 @@ void wifi_start(void) {
 
   ESP_ERROR_CHECK(esp_netif_init());
   ESP_ERROR_CHECK(esp_event_loop_create_default());
-  esp_netif_create_default_wifi_sta();
+  esp_netif_t *netif = esp_netif_create_default_wifi_sta();
+  ESP_ERROR_CHECK(esp_netif_set_hostname(netif, "ledka"));
 
   s_wifi_event_group = xEventGroupCreate();
 
