@@ -2,4 +2,5 @@
 /build
 /compile_commands.json
 /credentials.h
+/main/fonts.gen.c
 /sdkconfig.old

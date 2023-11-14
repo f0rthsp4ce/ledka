@@ -29,7 +29,9 @@ static void event_handler(void *arg, esp_event_base_t event_base,
       s_retry_num++;
       char buf[32];
       sprintf(buf, "retry %d", s_retry_num);
-      draw_text(buf, 64, 12);
+      reset_text();
+      draw_text(find_font_by_name("BMplain"), buf, 64, 12, 0);
+      text_timeout = 1000;
       ESP_LOGI(TAG, "retry to connect to the AP");
     } else {
       xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
@@ -40,7 +42,8 @@ static void event_handler(void *arg, esp_event_base_t event_base,
     char ip[16];
     sprintf(ip, IPSTR, IP2STR(&event->ip_info.ip));
     ESP_LOGI(TAG, "got ip: %s", ip);
-    draw_text(ip, 64, 12);
+    reset_text();
+    draw_text(find_font_by_name("BMplain"), ip, 64, 12, 0);
     text_timeout = 1000;
     s_retry_num = 0;
     xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);

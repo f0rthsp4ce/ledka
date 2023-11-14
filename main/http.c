@@ -241,12 +241,12 @@ static esp_err_t post_config_handler(httpd_req_t *req) {
 }
 
 static esp_err_t post_text_handler(httpd_req_t *req) {
-  char query[512], value[512];
-  unsigned long long ullval;
+  char query[512], font[20], value[512];
   esp_err_t err = httpd_req_get_url_query_str(req, query, sizeof query);
   CHECK_ERR(err, "Failed to get query string");
 
   unsigned long long timeout = 100, pos_x = 0, pos_y = 0;
+  strcpy(font, "BMplain");
 
   err = query_get_value_ull(query, "timeout", value, sizeof value, &timeout);
   CHECK_ERR_QUERY_VALUE(err, false);
@@ -254,10 +254,17 @@ static esp_err_t post_text_handler(httpd_req_t *req) {
   CHECK_ERR_QUERY_VALUE(err, false);
   err = query_get_value_ull(query, "y", value, sizeof value, &pos_y);
   CHECK_ERR_QUERY_VALUE(err, false);
+  err = query_get_value_str(query, "font", font, sizeof font);
+  CHECK_ERR_QUERY_VALUE(err, false);
   err = query_get_value_str(query, "text", value, sizeof value);
   CHECK_ERR_QUERY_VALUE(err, true);
 
-  draw_text(value, pos_x, pos_y);
+  const struct font_t *font_ = find_font_by_name(font);
+  if (!font_)
+    return return_error(req, ESP_ERR_INVALID_ARG, __FILE__, __LINE__,
+                        "Font not found: %s", font);
+  reset_text();
+  draw_text(font_, value, pos_x, pos_y, 0);
   text_timeout = timeout;
 
   httpd_resp_send(req, "got it", -1);

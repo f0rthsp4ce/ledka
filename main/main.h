@@ -5,6 +5,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <time.h>
+
+#include "fonts.h"
 
 // Common
 #define PANELS_X 4
@@ -52,9 +55,6 @@ void bars_set(const uint8_t *values, size_t count);
 void bars_step(void);
 void bars_draw(void);
 
-// font.c
-extern const unsigned char font_pzim3x5[96][3];
-
 // http.c
 void http_start(void);
 
@@ -67,7 +67,18 @@ bool life_is_stalled(const uint8_t *data);
 
 // text.c
 void draw_panels_hint(uint8_t *topo);
-void draw_text(const char *text, uint16_t pos_x, uint16_t pos_y);
+void draw_clock(time_t t, time_t target, bool hex);
+const struct font_t *find_font_by_name(const char *name);
+void reset_text(void);
+enum text_flags_t {
+  TEXT_SPACING_MASK = 0b11,
+
+  TEXT_SPACING_VAR = 0b00,
+  TEXT_SPACING_MONO = 0b01,
+  TEXT_SPACING_TABULAR = 0b10,
+};
+void draw_text(const struct font_t *font, const char *text, int16_t pos_x,
+               int16_t pos_y, enum text_flags_t flags);
 
 // wifi.c
 void wifi_start(void);

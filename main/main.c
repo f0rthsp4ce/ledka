@@ -1,5 +1,6 @@
 #include <driver/gpio.h>
 #include <esp_log.h>
+#include <esp_sntp.h>
 #include <esp_wifi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/event_groups.h>
@@ -106,6 +107,8 @@ bool ledmx_mktopo(uint8_t *idxes, char *error) {
   return true;
 }
 
+static bool show_clock = false;
+
 // TODO: experiment with field_config, find the best
 // permutation, and drop this code by making it non-configurable.  Or it is
 // already the best permutation?
@@ -132,7 +135,7 @@ static void ledmx_refresh(void *arg) {
       size_t idx = (config.order[i] & 0x7fff) +
                    (reverse ? 3 - field : field) * PANELS_X * 4;
       uint8_t byte = data_life[idx] | data_bars[idx];
-      if (text_timeout)
+      if (text_timeout || show_clock)
         byte = (byte & data_text_mask[idx]) | data_text[idx];
       if (reverse)
         ledmx_write_byte(~byte);
@@ -227,6 +230,21 @@ esp_err_t example_configure_stdin_stdout(void) {
 
 esp_timer_handle_t timer;
 
+static void clock_task(void *arg) {
+  time_t t = time(NULL);
+  const time_t delta_pre = 2 * 86400, delta_post = 86400, delta_urgent = 60;
+  const time_t time1 = 1700000000, time2 = 0x66666666;
+  if ((t >= time1 - delta_urgent && t <= time1 + delta_urgent) ||
+      (t >= time2 - delta_urgent && t <= time2 + delta_urgent))
+    text_timeout = 0;
+  if (text_timeout)
+    return;
+  if (t >= time1 - delta_pre && t <= time1 + delta_post)
+    show_clock = true, draw_clock(t, time1, false);
+  if (t >= time2 - delta_pre && t <= time2 + delta_post)
+    show_clock = true, draw_clock(t, time2, true);
+}
+
 void app_main() {
   example_configure_stdin_stdout();
 
@@ -236,8 +254,15 @@ void app_main() {
                                   .arg = NULL,
                                   .dispatch_method = ESP_TIMER_TASK,
                                   .name = "ledmx_refresh"};
-  // esp_timer_handle_t timer;
   ESP_ERROR_CHECK(esp_timer_create(&args, &timer));
+
+  // TODO: do I need separate esp_timer_create_args_t for clock_task?
+  esp_timer_handle_t clock_timer;
+  esp_timer_create_args_t clock_args = {.callback = &clock_task,
+                                        .arg = NULL,
+                                        .dispatch_method = ESP_TIMER_TASK,
+                                        .name = "clock_task"};
+  ESP_ERROR_CHECK(esp_timer_create(&clock_args, &clock_timer));
 
   const uint8_t rev = 0x80;
   ledmx_mktopo(
@@ -264,6 +289,11 @@ void app_main() {
 #endif
 
   ESP_ERROR_CHECK(esp_timer_start_periodic(timer, 10000));
+
+  sntp_setoperatingmode(SNTP_OPMODE_POLL);
+  sntp_setservername(0, "pool.ntp.org");
+  sntp_init();
+  ESP_ERROR_CHECK(esp_timer_start_periodic(clock_timer, 1000000 / 4)); // 4 Hz
 
   int randcol = -1;
   while (1) {

@@ -17,6 +17,7 @@ In the root of the project, create file named `/credentials.h` in the following 
 # Open a shell containing the toolchain. Might take a while.
 nix develop '.#build'
 
+./tools/fontgen.py
 idf.py build
 ```
 

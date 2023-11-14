@@ -1,7 +1,7 @@
 idf_component_register(
   SRCS
   "bars.c"
-  "font.c"
+  "fonts.gen.c"
   "globals.c"
   "http.c"
   "life.c"
