@@ -58,6 +58,11 @@ void bars_draw(void);
 // http.c
 void http_start(void);
 
+// ledmx.c
+bool ledmx_mktopo(uint8_t *idxes, char *error);
+void ledmx_init(void);
+void ledmx_refresh(void *arg);
+
 // life.c
 void putpixel(uint8_t *data, uint32_t x, uint32_t y, bool on);
 void life_randomize(uint8_t *data);

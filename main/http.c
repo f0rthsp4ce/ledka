@@ -211,7 +211,6 @@ static esp_err_t post_config_handler(httpd_req_t *req) {
 
     draw_panels_hint(topo);
     text_timeout = 500;
-    bool ledmx_mktopo(uint8_t * idxes, char *error);
     char error[128];
     error[0] = 0;
     if (!ledmx_mktopo(topo, error))

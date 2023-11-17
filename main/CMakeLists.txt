@@ -4,6 +4,7 @@ idf_component_register(
   "fonts.gen.c"
   "globals.c"
   "http.c"
+  "ledmx.c"
   "life.c"
   "main.c"
   "text.c"
