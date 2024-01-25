@@ -11,7 +11,7 @@ build/inband-printer: tools/inband-printer.c tools/lib.h
 	mkdir -p build
 	$(CC) $< -o $@
 
-build/print-text: tools/print-text.c main/text.c main/fonts.gen.c main/life.c tools/lib.h
+build/print-text: tools/print-text.c main/clock.c main/text.c main/fonts.gen.c main/life.c tools/lib.h
 	mkdir -p build
 	$(CC) $(filter %.c,$^) -o $@
 

@@ -9,9 +9,16 @@
 
 #include "fonts.h"
 
+#define LEDKA_VERSION 2
+
 // Common
+#if LEDKA_VERSION == 1
 #define PANELS_X 4
 #define PANELS_Y 2
+#elif LEDKA_VERSION == 2
+#define PANELS_X 1
+#define PANELS_Y 1
+#endif
 
 #define OUTPUT_LED
 // #define OUTPUT_UART
@@ -22,6 +29,7 @@
 #ifdef ESP_PLATFORM
 extern SemaphoreHandle_t data_mutex;
 #endif
+extern const uint8_t default_topo[PANELS_X * PANELS_Y];
 extern bool data1_active;
 extern uint8_t data1[64 * PANELS_X * PANELS_Y];
 extern uint8_t data2[64 * PANELS_X * PANELS_Y];
@@ -55,11 +63,16 @@ void bars_set(const uint8_t *values, size_t count);
 void bars_step(void);
 void bars_draw(void);
 
+// clock.c
+void ledka_clock_init(void);
+void ledka_clock_draw(time_t now);
+void ledka_clock_timer_set(time_t start, time_t end);
+
 // http.c
 void http_start(void);
 
 // ledmx.c
-bool ledmx_mktopo(uint8_t *idxes, char *error);
+bool ledmx_mktopo(const uint8_t *idxes, char *error);
 void ledmx_init(void);
 void ledmx_refresh(void *arg);
 
@@ -72,7 +85,8 @@ bool life_is_stalled(const uint8_t *data);
 
 // text.c
 void draw_panels_hint(uint8_t *topo);
-void draw_clock(time_t t, time_t target, bool hex);
+void draw_clock1(time_t t, time_t target, bool hex);
+void draw_clock2(time_t t);
 const struct font_t *find_font_by_name(const char *name);
 void reset_text(void);
 enum text_flags_t {

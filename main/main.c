@@ -18,12 +18,88 @@
 
 int iteration = 0;
 bool show_clock = false;
+esp_timer_handle_t timer;
 
-esp_err_t example_configure_stdin_stdout(void) {
-  static bool configured = false;
-  if (configured) {
-    return ESP_OK;
+static esp_err_t ledka_main_configure_uart(void);
+static esp_timer_handle_t ledka_main_clock1_init(void);
+static esp_timer_handle_t ledka_main_clock2_init(void);
+
+void app_main() {
+  ledka_main_configure_uart();
+  esp_timer_early_init();
+
+  esp_timer_create_args_t args = {.callback = &ledmx_refresh,
+                                  .arg = NULL,
+                                  .dispatch_method = ESP_TIMER_TASK,
+                                  .name = "ledmx_refresh"};
+  ESP_ERROR_CHECK(esp_timer_create(&args, &timer));
+
+  esp_timer_handle_t clock_timer =
+#if LEDKA_VERSION == 1
+      ledka_main_clock1_init()
+#elif LEDKA_VERSION == 2
+      ledka_main_clock2_init()
+#endif
+      ;
+
+  ledmx_mktopo(default_topo, NULL);
+
+  memset(data1, 0, sizeof data1);
+  memset(data2, 0, sizeof data2);
+  srand(esp_timer_get_time());
+  life_randomize(data1);
+
+  ledmx_init();
+  bars_init();
+
+#ifdef WIFI_ENABLED
+  wifi_start();
+  http_start();
+  udp_start();
+#endif
+
+  ESP_ERROR_CHECK(esp_timer_start_periodic(timer, 10000));
+
+  sntp_setoperatingmode(SNTP_OPMODE_POLL);
+  sntp_setservername(0, "pool.ntp.org");
+  sntp_init();
+  ESP_ERROR_CHECK(esp_timer_start_periodic(clock_timer, 1000000 / 4)); // 4 Hz
+
+  int randcol = -1;
+  while (1) {
+    xSemaphoreTake(data_mutex, portMAX_DELAY);
+    /*
+    if (config.gol_enabled) {
+      life_step(data1_active ? data1 : data2, data1_active ? data2 : data1);
+      if (life_is_stalled(data1_active ? data2 : data1) && randcol < 0)
+        randcol = 0;
+      if (randcol >= 0) {
+        life_randomize_col(data1_active ? data2 : data1, randcol);
+        if (randcol++ == PANELS_X * 32)
+          randcol = -1;
+      }
+      data1_active = !data1_active;
+    }
+    */
+
+    if (text_timeout)
+      text_timeout--;
+
+    // TODO: hide bars on ledka2
+    /*
+    if (config.bars_enabled) {
+      bars_step();
+      bars_draw();
+    }
+    */
+    xSemaphoreGive(data_mutex);
+
+    vTaskDelay(1);
+    ++iteration;
   }
+}
+
+static esp_err_t ledka_main_configure_uart(void) {
   // Initialize VFS & UART so we can use std::cout/cin
   setvbuf(stdin, NULL, _IONBF, 0);
   /* Install UART driver for interrupt-driven reads and writes */
@@ -50,13 +126,12 @@ esp_err_t example_configure_stdin_stdout(void) {
   /* Move the caret to the beginning of the next line on '\n' */
   esp_vfs_dev_uart_port_set_tx_line_endings(CONFIG_ESP_CONSOLE_UART_NUM,
                                             ESP_LINE_ENDINGS_CRLF);
-  configured = true;
   return ESP_OK;
 }
 
-esp_timer_handle_t timer;
+// Clock for LEDKA 1. Clock is displayed during anniversary UNIX timestamps.
 
-static void clock_task(void *arg) {
+static void ledka_main_clock1_task(void *arg) {
   time_t t = time(NULL);
   const time_t delta_pre = 2 * 86400, delta_post = 86400, delta_urgent = 60;
   const time_t time1 = 1700000000, time2 = 0x66666666;
@@ -65,87 +140,41 @@ static void clock_task(void *arg) {
     text_timeout = 0;
   if (text_timeout)
     return;
+  show_clock = false;
   if (t >= time1 - delta_pre && t <= time1 + delta_post)
-    show_clock = true, draw_clock(t, time1, false);
+    show_clock = true, draw_clock1(t, time1, false);
   if (t >= time2 - delta_pre && t <= time2 + delta_post)
-    show_clock = true, draw_clock(t, time2, true);
+    show_clock = true, draw_clock1(t, time2, true);
 }
 
-void app_main() {
-  example_configure_stdin_stdout();
-
-  esp_timer_early_init();
-
-  esp_timer_create_args_t args = {.callback = &ledmx_refresh,
-                                  .arg = NULL,
-                                  .dispatch_method = ESP_TIMER_TASK,
-                                  .name = "ledmx_refresh"};
-  ESP_ERROR_CHECK(esp_timer_create(&args, &timer));
-
-  // TODO: do I need separate esp_timer_create_args_t for clock_task?
+static esp_timer_handle_t ledka_main_clock1_init(void) {
   esp_timer_handle_t clock_timer;
-  esp_timer_create_args_t clock_args = {.callback = &clock_task,
-                                        .arg = NULL,
-                                        .dispatch_method = ESP_TIMER_TASK,
-                                        .name = "clock_task"};
+  static esp_timer_create_args_t clock_args = {
+      .callback = &ledka_main_clock1_task,
+      .arg = NULL,
+      .dispatch_method = ESP_TIMER_TASK,
+      .name = "clock_task",
+  };
   ESP_ERROR_CHECK(esp_timer_create(&clock_args, &clock_timer));
+  return clock_timer;
+}
 
-  const uint8_t rev = 0x80;
-  ledmx_mktopo(
-      (uint8_t[]){
-          // clang-format off
-          rev|5, rev|4, rev|3, rev|0,
-          rev|7, rev|6, rev|2, rev|1,
-          // clang-format on
-      },
-      NULL);
+// Clock for LEDKA 2. Clock is displayed all the time.
+static void ledka_main_clock2_task(void *arg) {
+  time_t t = time(NULL);
+  t += 4 * 3600; // UTC+4
+  draw_clock2(t);
+}
 
-  memset(data1, 0, sizeof data1);
-  memset(data2, 0, sizeof data2);
-  srand(esp_timer_get_time());
-  life_randomize(data1);
-
-  ledmx_init();
-  bars_init();
-
-#ifdef WIFI_ENABLED
-  wifi_start();
-  http_start();
-  udp_start();
-#endif
-
-  ESP_ERROR_CHECK(esp_timer_start_periodic(timer, 10000));
-
-  sntp_setoperatingmode(SNTP_OPMODE_POLL);
-  sntp_setservername(0, "pool.ntp.org");
-  sntp_init();
-  ESP_ERROR_CHECK(esp_timer_start_periodic(clock_timer, 1000000 / 4)); // 4 Hz
-
-  int randcol = -1;
-  while (1) {
-    xSemaphoreTake(data_mutex, portMAX_DELAY);
-    if (config.gol_enabled) {
-      life_step(data1_active ? data1 : data2, data1_active ? data2 : data1);
-      if (life_is_stalled(data1_active ? data2 : data1) && randcol < 0)
-        randcol = 0;
-      if (randcol >= 0) {
-        life_randomize_col(data1_active ? data2 : data1, randcol);
-        if (randcol++ == PANELS_X * 32)
-          randcol = -1;
-      }
-      data1_active = !data1_active;
-    }
-
-    if (text_timeout)
-      text_timeout--;
-
-    if (config.bars_enabled) {
-      bars_step();
-      bars_draw();
-    }
-    xSemaphoreGive(data_mutex);
-
-    vTaskDelay(1);
-    ++iteration;
-  }
+static esp_timer_handle_t ledka_main_clock2_init(void) {
+  show_clock = true;
+  esp_timer_handle_t clock_timer;
+  static esp_timer_create_args_t clock_args = {
+      .callback = &ledka_main_clock2_task,
+      .arg = NULL,
+      .dispatch_method = ESP_TIMER_TASK,
+      .name = "clock_task",
+  };
+  ESP_ERROR_CHECK(esp_timer_create(&clock_args, &clock_timer));
+  return clock_timer;
 }

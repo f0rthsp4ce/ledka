@@ -59,6 +59,10 @@
             # required by gdb
             LD_LIBRARY_PATH =
               "${nixpkgs-old.legacyPackages.${system}.python2}/lib";
+
+            # Workaround since esp-idf brings own python
+            PYTHON_FONTGEN = "${python}/bin/python";
+
             FONT_PATH = fonts;
           };
           devShells.default = pkgs.mkShell {

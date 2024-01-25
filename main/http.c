@@ -270,48 +270,39 @@ static esp_err_t post_text_handler(httpd_req_t *req) {
   return ESP_OK;
 }
 
-static httpd_uri_t uri_get = {
-    .uri = "/",
-    .method = HTTP_GET,
-    .handler = get_handler,
-    .user_ctx = NULL,
-};
+static esp_err_t put_timer_handler(httpd_req_t *req) {
+  return ESP_OK; // TODO
+}
 
-static httpd_uri_t uri_get_stats = {
-    .uri = "/stats",
-    .method = HTTP_GET,
-    .handler = get_stats_handler,
-    .user_ctx = NULL,
-};
-
-static httpd_uri_t uri_post_data = {
-    .uri = "/data",
-    .method = HTTP_POST,
-    .handler = post_data_handler,
-    .user_ctx = NULL,
-};
-
-static httpd_uri_t uri_post_config = {
-    .uri = "/config",
-    .method = HTTP_POST,
-    .handler = post_config_handler,
-    .user_ctx = NULL,
-};
-
-static httpd_uri_t uri_post_text = {
-    .uri = "/text",
-    .method = HTTP_POST,
-    .handler = post_text_handler,
-    .user_ctx = NULL,
-};
+static esp_err_t delete_timer_handler(httpd_req_t *req) {
+  return ESP_OK; // TODO
+}
 
 void http_start(void) {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   httpd_handle_t server = NULL;
   ESP_ERROR_CHECK(httpd_start(&server, &config));
-  httpd_register_uri_handler(server, &uri_get);
-  httpd_register_uri_handler(server, &uri_get_stats);
-  httpd_register_uri_handler(server, &uri_post_data);
-  httpd_register_uri_handler(server, &uri_post_config);
-  httpd_register_uri_handler(server, &uri_post_text);
+
+#define METHOD(METHOD, URI, HANDLER)                                           \
+  do {                                                                         \
+    static const httpd_uri_t uri = {                                           \
+        .uri = (URI),                                                          \
+        .method = HTTP_##METHOD,                                               \
+        .handler = (HANDLER),                                                  \
+        .user_ctx = NULL,                                                      \
+    };                                                                         \
+    httpd_register_uri_handler(server, &uri);                                  \
+  } while (0)
+
+  // clang-format off
+  METHOD(GET,    "/",       get_handler);
+  METHOD(GET,    "/stats",  get_stats_handler);
+  METHOD(POST,   "/data",   post_data_handler);
+  METHOD(POST,   "/config", post_config_handler);
+  METHOD(POST,   "/text",   post_text_handler);
+  METHOD(PUT,    "/timer",  put_timer_handler);
+  METHOD(DELETE, "/timer",  delete_timer_handler);
+  // clang-format on
+
+#undef METHOD
 }

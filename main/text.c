@@ -68,7 +68,7 @@ static void draw_bin(uint32_t value, int px, int py) {
   }
 }
 
-void draw_clock(time_t t, time_t target, bool hex) {
+void draw_clock1(time_t t, time_t target, bool hex) {
   const struct font_t *font = find_font_by_name("BMSPA");
   static bool blink = false;
   reset_text();
@@ -85,6 +85,15 @@ void draw_clock(time_t t, time_t target, bool hex) {
       return;
   draw_text(font, buf, (32 * PANELS_X - strlen(buf) * (font->width + 1)) / 2, 8,
             TEXT_SPACING_MONO);
+}
+
+void draw_clock2(time_t t) {
+  const struct font_t *font = find_font_by_name("BMSPA");
+  reset_text();
+  char buf[64];
+  sprintf(buf, "%02d%02d%02d", (int)(t / 3600) % 24, (int)(t / 60) % 60,
+          (int)t % 60);
+  draw_text(font, buf, 0, 0, TEXT_SPACING_MONO);
 }
 
 const struct font_t *find_font_by_name(const char *name) {
