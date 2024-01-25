@@ -58,13 +58,14 @@ void ledmx_init(void) {
 }
 
 // Configure the topology of the LED matrix.
-// @param idxes A list of panel indexes, in the order in which they are connected
-//        a panel index. 
+// @param idxes A list of panel indexes, in the order in which they are
+// connected
+//        a panel index.
 //        with 0x80 to reverse the order of fields in the panel.
 // @param error a pointer to a buffer to store an error message in case of
 //        failure.
 // @return true on success, false on error.
-bool ledmx_mktopo(uint8_t *idxes, char *error) {
+bool ledmx_mktopo(const uint8_t *idxes, char *error) {
   for (uint16_t i = 0; i < sizeof config.order / sizeof config.order[0]; i++)
     config.order[i] = 0xffff;
 

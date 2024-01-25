@@ -103,6 +103,42 @@ static esp_err_t query_get_value_ull(const char *qry, const char *key,
   return rc;
 }
 
+static esp_err_t query_get_value_time_t(const char *qry, const char *key,
+                                        time_t now, char *buf, size_t buf_len,
+                                        time_t *val) {
+  esp_err_t rc = query_get_value_str(qry, key, buf, buf_len);
+  if (rc != ESP_OK)
+    return rc;
+
+  if (buf[0] < '0' || buf[0] > '9' || buf[1] < '0' || buf[1] > '9' || // HH
+      buf[2] != ':' ||                                                // ':'
+      buf[3] < '0' || buf[3] > '9' || buf[4] < '0' || buf[4] > '9' || // MM
+      buf[5] != '\0')                                                 // '\0'
+    return ESP_ERR_INVALID_ARG;
+
+  // Find the nearest UNIX timestamp by checking 3 candidates in a loop: for
+  // yesterday, today and tomorrow.
+  //
+  //         00:00   yesterday   00:00     today     00:00   tomorrow    00:00
+  // now       |                   |                 x |                   |
+  // t         |                   |     x             |                   |
+  // candidate |     x             |     x             |     x             |
+  time_t t = now - now % 86400;                        // midnight before `now`
+  t += (buf[0] - '0') * 36000 + (buf[1] - '0') * 3600; // hours
+  t += (buf[3] - '0') * 600 + (buf[4] - '0') * 60;     // minutes
+
+  time_t best = 0, best_delta = 0x7fffffff;
+  for (time_t day = -86400; day <= 86400; day += 86400) {
+    time_t t_ = t + day;
+    time_t delta = t_ > now ? t_ - now : now - t_;
+    if (delta < best_delta)
+      best = t_, best_delta = delta;
+  }
+  *val = best;
+
+  return rc;
+}
+
 static esp_err_t get_handler(httpd_req_t *req) {
   char buf[1024], *p = buf;
   PRINT(buf, p, "Hello, world!\n");
@@ -270,48 +306,66 @@ static esp_err_t post_text_handler(httpd_req_t *req) {
   return ESP_OK;
 }
 
-static httpd_uri_t uri_get = {
-    .uri = "/",
-    .method = HTTP_GET,
-    .handler = get_handler,
-    .user_ctx = NULL,
-};
+static esp_err_t put_timer_handler(httpd_req_t *req) {
+  char query[512], value[512];
+  esp_err_t err = httpd_req_get_url_query_str(req, query, sizeof query);
+  CHECK_ERR(err, "Failed to get query string");
 
-static httpd_uri_t uri_get_stats = {
-    .uri = "/stats",
-    .method = HTTP_GET,
-    .handler = get_stats_handler,
-    .user_ctx = NULL,
-};
+  time_t now = time(NULL) + 4 * 3600; // UTC+4 // TODO: constant
+  time_t timer_start = 0, timer_end = 0;
+  err = query_get_value_time_t(query, "start", now, value, sizeof value,
+                               &timer_start);
+  CHECK_ERR_QUERY_VALUE(err, true);
+  err = query_get_value_time_t(query, "end", now, value, sizeof value,
+                               &timer_end);
+  CHECK_ERR_QUERY_VALUE(err, true);
+  if (timer_start > timer_end)
+    return return_error(req, ESP_ERR_INVALID_ARG, __FILE__, __LINE__,
+                        "Invalid value for 'start' and 'end'");
+  ledka_clock_timer_set(timer_start, timer_end);
 
-static httpd_uri_t uri_post_data = {
-    .uri = "/data",
-    .method = HTTP_POST,
-    .handler = post_data_handler,
-    .user_ctx = NULL,
-};
+  sprintf(value,
+          "Timer set.\n"
+          "Current local time: %ld.\n"
+          "Timer start: %ld (%ld seconds from now).\n"
+          "Timer end: %ld (%ld seconds from now).\n",
+          (long)now, (long)timer_start, (long)(timer_start - now),
+          (long)timer_end, (long)(timer_end - now));
 
-static httpd_uri_t uri_post_config = {
-    .uri = "/config",
-    .method = HTTP_POST,
-    .handler = post_config_handler,
-    .user_ctx = NULL,
-};
+  httpd_resp_send(req, value, -1);
+  return ESP_OK;
+}
 
-static httpd_uri_t uri_post_text = {
-    .uri = "/text",
-    .method = HTTP_POST,
-    .handler = post_text_handler,
-    .user_ctx = NULL,
-};
+static esp_err_t delete_timer_handler(httpd_req_t *req) {
+  ledka_clock_timer_unset();
+  return ESP_OK;
+}
 
 void http_start(void) {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   httpd_handle_t server = NULL;
   ESP_ERROR_CHECK(httpd_start(&server, &config));
-  httpd_register_uri_handler(server, &uri_get);
-  httpd_register_uri_handler(server, &uri_get_stats);
-  httpd_register_uri_handler(server, &uri_post_data);
-  httpd_register_uri_handler(server, &uri_post_config);
-  httpd_register_uri_handler(server, &uri_post_text);
+
+#define METHOD(METHOD, URI, HANDLER)                                           \
+  do {                                                                         \
+    static const httpd_uri_t uri = {                                           \
+        .uri = (URI),                                                          \
+        .method = HTTP_##METHOD,                                               \
+        .handler = (HANDLER),                                                  \
+        .user_ctx = NULL,                                                      \
+    };                                                                         \
+    httpd_register_uri_handler(server, &uri);                                  \
+  } while (0)
+
+  // clang-format off
+  METHOD(GET,    "/",       get_handler);
+  METHOD(GET,    "/stats",  get_stats_handler);
+  METHOD(POST,   "/data",   post_data_handler);
+  METHOD(POST,   "/config", post_config_handler);
+  METHOD(POST,   "/text",   post_text_handler);
+  METHOD(PUT,    "/timer",  put_timer_handler);
+  METHOD(DELETE, "/timer",  delete_timer_handler);
+  // clang-format on
+
+#undef METHOD
 }

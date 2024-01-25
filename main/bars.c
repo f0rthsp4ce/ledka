@@ -13,9 +13,20 @@ static struct {
 } bars[BAR_COUNT];
 static int age = 0;
 
-void bars_init(void) { bars_set(NULL, 0); }
+// We want to avoid out-of-bounds access on small screens
+#define RETURN_IF_NOT_SUPPORTED(V)                                             \
+  do {                                                                         \
+    if (PANELS_X < 4 || PANELS_Y < 2)                                          \
+      return V;                                                                \
+  } while (0)
+
+void bars_init(void) {
+  RETURN_IF_NOT_SUPPORTED();
+  bars_set(NULL, 0);
+}
 
 void bars_set(const uint8_t *values, size_t count) {
+  RETURN_IF_NOT_SUPPORTED();
   age = 0;
   // printf("bars_set:");
   for (size_t i = 0; i < BAR_COUNT; i++) {
@@ -32,6 +43,7 @@ void bars_set(const uint8_t *values, size_t count) {
 }
 
 void bars_step(void) {
+  RETURN_IF_NOT_SUPPORTED();
   age++;
   // TODO: under mutex
   if (age == 32)
@@ -48,6 +60,7 @@ void bars_step(void) {
 }
 
 void bars_draw(void) {
+  RETURN_IF_NOT_SUPPORTED();
   uint8_t *data_a = data1_active ? data1 : data2;
   uint8_t *data_b = data_bars;
 

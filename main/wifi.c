@@ -13,6 +13,12 @@
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
 
+#if LEDKA_VERSION == 1
+#define HOSTNAME "ledka1"
+#elif LEDKA_VERSION == 2
+#define HOSTNAME "ledka2"
+#endif
+
 static EventGroupHandle_t s_wifi_event_group;
 static esp_event_handler_instance_t s_instance_any_id;
 static esp_event_handler_instance_t s_instance_got_ip;
@@ -65,7 +71,7 @@ void wifi_start(void) {
   ESP_ERROR_CHECK(esp_netif_init());
   ESP_ERROR_CHECK(esp_event_loop_create_default());
   esp_netif_t *netif = esp_netif_create_default_wifi_sta();
-  ESP_ERROR_CHECK(esp_netif_set_hostname(netif, "ledka"));
+  ESP_ERROR_CHECK(esp_netif_set_hostname(netif, HOSTNAME));
 
   s_wifi_event_group = xEventGroupCreate();
 

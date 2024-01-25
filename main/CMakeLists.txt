@@ -1,6 +1,7 @@
 idf_component_register(
   SRCS
   "bars.c"
+  "clock.c"
   "fonts.gen.c"
   "globals.c"
   "http.c"
